@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Server-Side Buffer Overflow — Demo &amp; Defence</title>
+<style>
+  :root {
+    --bg:#0f1419; --panel:#1a2230; --ink:#e6edf3; --muted:#8b98a9;
+    --vuln:#ff5d5d; --safe:#3fb950; --warn:#e3b341; --accent:#58a6ff; --line:#2d3a4d;
+    --mono:'SF Mono',ui-monospace,'Cascadia Code',Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:system-ui,Segoe UI,Roboto,sans-serif;line-height:1.5}
+  header{padding:28px 32px;border-bottom:1px solid var(--line)}
+  h1{margin:0 0 4px;font-size:1.5rem}
+  .sub{color:var(--muted);font-size:.9rem}
+  main{max-width:980px;margin:0 auto;padding:24px 32px}
+  .note{background:#1d2a1f;border:1px solid #2a4a2f;border-radius:8px;
+        padding:12px 16px;font-size:.85rem;color:#b6e6bd;margin-bottom:24px}
+  textarea{width:100%;min-height:70px;background:#0b1017;color:var(--ink);
+           border:1px solid var(--line);border-radius:8px;padding:12px;
+           font-family:var(--mono);font-size:.9rem;resize:vertical}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 4px}
+  button{border:0;border-radius:7px;padding:9px 14px;font-size:.85rem;
+         font-weight:600;cursor:pointer;color:#0b1017}
+  .preset{background:#26323f;color:var(--ink);font-weight:500}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px}
+  @media(max-width:760px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px}
+  .card h3{margin:0 0 4px;font-size:1rem}
+  .card p{margin:0 0 12px;color:var(--muted);font-size:.83rem}
+  .b-vuln{background:var(--vuln)} .b-safe{background:var(--safe)}
+  .b-warn{background:var(--warn)} .b-acc{background:var(--accent)}
+  pre{background:#0b1017;border:1px solid var(--line);border-radius:8px;
+      padding:14px;overflow:auto;font-family:var(--mono);font-size:.82rem;
+      white-space:pre-wrap;word-break:break-word;min-height:42px;margin-top:18px}
+  .tag{display:inline-block;padding:2px 9px;border-radius:20px;font-size:.72rem;
+       font-weight:700;margin-right:8px}
+  .t-crashed{background:var(--vuln);color:#0b1017}
+  .t-corrupted{background:var(--warn);color:#0b1017}
+  .t-prevented,.t-rejected,.t-ok{background:var(--safe);color:#0b1017}
+  .t-timeout,.t-error,.t-blocked{background:var(--muted);color:#0b1017}
+  code{font-family:var(--mono);color:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Server-Side Buffer Overflow — Demonstration &amp; Defence</h1>
+  <div class="sub">Native C backend (run as an isolated subprocess) · exploitation impact vs. prevention · localhost lab</div>
+</header>
+<main>
+  <div class="note">
+    Educational/defensive lab. It shows that an overflow <b>crashes</b> the
+    server process (availability impact) and <b>corrupts adjacent memory</b>
+    (integrity impact), and how bounds checking, the stack canary / FORTIFY_SOURCE,
+    and memory-safe design prevent it. It contains no control-flow-hijacking
+    exploit, shellcode, or protection bypasses.
+  </div>
+
+  <label for="inp"><b>Input sent to the server</b> (the C buffer is 64 bytes for crash, 16 bytes for corruption):</label>
+  <textarea id="inp">hello</textarea>
+  <div class="row">
+    <button class="preset" onclick="setLen(5)">normal (5)</button>
+    <button class="preset" onclick="setLen(20)">overflow 16-byte buf (20)</button>
+    <button class="preset" onclick="setLen(200)">overflow 64-byte buf (200)</button>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3 style="color:var(--vuln)">① Exploitation — Crash (availability)</h3>
+      <p>Unsafe <code>strcpy</code> into a 64-byte stack buffer, no protections. Long input smashes the stack → process dies.</p>
+      <button class="b-vuln" onclick="call('/api/vuln/crash')">Send to VULNERABLE server</button>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--warn)">② Exploitation — Corruption (integrity)</h3>
+      <p>Overflow a 16-byte buffer to overwrite an adjacent <code>authorized</code> variable. Use input length 17–24.</p>
+      <button class="b-warn" onclick="call('/api/vuln/corrupt')">Send to VULNERABLE server</button>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--safe)">③ Prevention — Bounds check</h3>
+      <p>Same logic, but the code validates length and uses a bounded copy (<code>snprintf</code>). Oversized input is refused.</p>
+      <button class="b-safe" onclick="call('/api/secure/bounds')">Send to SECURE server</button>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--accent)">④ Prevention — Compiler hardening</h3>
+      <p>Same unsafe source, compiled with <code>-fstack-protector-all</code> + <code>FORTIFY_SOURCE</code>. The overflow is detected and aborted safely.</p>
+      <button class="b-acc" onclick="call('/api/secure/hardened')">Send to HARDENED server</button>
+    </div>
+  </div>
+
+  <pre id="out">Result will appear here…</pre>
+
+  <h2 style="margin-top:34px;font-size:1.1rem;border-top:1px solid var(--line);padding-top:24px">
+    Backend evidence (proof it is real)</h2>
+  <p style="color:var(--muted);font-size:.85rem;margin-top:0">
+    Everything below is produced on the server. The log panel updates live as you
+    click above; "Verify protections" inspects the actual compiled binaries.</p>
+
+  <div class="row" style="margin-bottom:6px">
+    <button class="b-acc" onclick="verify()">🔍 Verify protections (objdump / readelf)</button>
+    <button class="preset" onclick="refreshLogs()">↻ Refresh backend log</button>
+  </div>
+  <pre id="verify">Click "Verify protections" to inspect the two binaries on the backend…</pre>
+
+  <div style="color:var(--muted);font-size:.8rem;margin:14px 0 4px">Live backend log (newest at bottom):</div>
+  <pre id="logs" style="max-height:260px">backend log will stream here…</pre>
+</main>
+
+<script>
+function setLen(n){ document.getElementById('inp').value = 'A'.repeat(n); }
+
+async function call(url){
+  const input = document.getElementById('inp').value;
+  const out = document.getElementById('out');
+  out.textContent = 'Running on the server…';
+  try {
+    const res = await fetch(url, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({input})
+    });
+    const d = await res.json();
+    const tag = `<span class="tag t-${d.outcome}">${d.outcome.toUpperCase()}</span>`;
+    out.innerHTML =
+      tag + (d.signal ? `signal: ${d.signal}\n` : '\n') +
+      `\n${d.detail}\n` +
+      (d.binary ? `\n[executed binary] ${d.binary}` : '') +
+      (d.stdout ? `\n[stdout]\n${escapeHtml(d.stdout)}` : '') +
+      (d.stderr ? `\n[stderr]\n${escapeHtml(d.stderr)}` : '') +
+      (d.exit!==undefined ? `\n\n[exit code] ${d.exit}` : '');
+    refreshLogs();   // pull the matching backend log lines immediately
+  } catch(e){ out.textContent = 'Request failed: ' + e; }
+}
+
+async function verify(){
+  const v = document.getElementById('verify');
+  v.textContent = 'Inspecting binaries on the backend…';
+  try {
+    const d = await (await fetch('/api/verify')).json();
+    const fmt = (name, b) => b.exists
+      ? `${name}\n`
+        + `  stack canary (__stack_chk_fail) refs : ${b.stack_canary_refs} ${b.stack_canary_refs>0?'✅ present':'❌ absent'}\n`
+        + `  non-executable stack (NX)            : ${b.nx_stack?'✅ yes':'❌ no'}\n`
+        + `  size / sha256                        : ${b.size_bytes} bytes / ${b.sha256}…\n`
+      : `${name}: not built\n`;
+    v.innerHTML =
+      '<b>Proof the two binaries are genuinely compiled differently:</b>\n\n'
+      + fmt('VULNERABLE  (bufferdemo_vuln)', d.vulnerable) + '\n'
+      + fmt('HARDENED    (bufferdemo_hardened)', d.hardened)
+      + '\nThe hardened binary carries the stack-canary check; the vulnerable one '
+      + 'does not. Different SHA-256 = different machine code from the same source.';
+    refreshLogs();
+  } catch(e){ v.textContent = 'Verify failed: ' + e; }
+}
+
+async function refreshLogs(){
+  try {
+    const d = await (await fetch('/api/backend-logs')).json();
+    const el = document.getElementById('logs');
+    el.textContent = d.lines.join('\n') || '(no backend activity yet)';
+    el.scrollTop = el.scrollHeight;   // keep newest in view
+  } catch(e){ /* ignore transient errors */ }
+}
+
+// Stream the backend log continuously so the panel is always current.
+setInterval(refreshLogs, 1500);
+refreshLogs();
+
+function escapeHtml(s){ return s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+</script>
+</body>
+</html>
