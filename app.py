@@ -1,18 +1,6 @@
 """
 Flask web application that demonstrates a server-side buffer overflow and its
 prevention, by invoking the native C binaries as isolated SUBPROCESSES.
-
-Design / safety notes
-----------------------
-* The risky native code runs in a child process. If it crashes (SIGSEGV), only
-  the child dies; this Flask server keeps serving and reports the crash. That
-  isolation is itself a defensive technique (sandboxing untrusted/native code).
-* A timeout guards against a hung child.
-* Input length is capped before we ever reach the unsafe path in the "secure"
-  endpoints — the web tier does its own validation (defence in depth).
-* This app contains NO exploit logic: it only triggers the vulnerable binary with
-  user input and reports the observable outcome (success / crash / corruption /
-  prevented), then contrasts it with the safe behaviour.
 """
 import os
 import signal
@@ -22,11 +10,6 @@ from flask import Flask, request, jsonify, render_template
 
 app = Flask(__name__)
 
-# --- Backend audit logging ---------------------------------------------------
-# Every native invocation is logged to BOTH the console (visible via
-# `docker logs <container>` or in the terminal running the container) AND to a
-# file `demo.log`. This is the evidence trail proving the outcomes are real
-# subprocess results, not hardcoded UI text.
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -58,6 +41,34 @@ HARD_BIN = os.path.join(NATIVE_DIR, "bufferdemo_hardened")
 # Hard cap on input we will pass to ANY subprocess (a sanity limit, not the demo's
 # bounds check). Keeps the lab safe even if someone pastes megabytes.
 MAX_INPUT = 4096
+
+
+def _parse_memory(stdout: str):
+    """Turn the C program's key=value evidence lines into a structured dict, and
+    decode the corrupted neighbour bytes back into characters. Returns None if the
+    output is not from a flag-mode run."""
+    if "verdict=" not in stdout:
+        return None
+    d = {}
+    for line in stdout.splitlines():
+        if "=" in line:
+            k, _, v = line.partition("=")
+            d[k.strip()] = v.strip()
+    # Decode authorized_after (a 32-bit int) into its 4 bytes, little-endian, so
+    # the characters appear in the same order they were typed.
+    try:
+        after = int(d.get("authorized_after", "0"), 16)
+        raw = after.to_bytes(4, "little")
+        d["neighbour_chars"] = "".join(chr(x) if 32 <= x < 127 else "." for x in raw)
+    except Exception:
+        d["neighbour_chars"] = ""
+    # How many bytes spilled past the 16-byte buffer.
+    try:
+        d["bytes_past_buffer"] = max(
+            0, int(d.get("input_len", "0")) - int(d.get("buffer_size", "16")))
+    except Exception:
+        d["bytes_past_buffer"] = 0
+    return d
 
 
 def run_native(binary: str, mode: str, user_input: str) -> dict:
@@ -121,11 +132,45 @@ def _classify(binary: str, mode: str, user_input: str) -> dict:
             "stdout": stdout, "stderr": stderr, "exit": rc,
         }
 
-    if "INTEGRITY VIOLATION" in stdout:
+    # Flag modes emit key=value evidence lines (addresses, before/after value).
+    # Parse them into a structured 'memory' object the UI renders as proof.
+    mem = _parse_memory(stdout)
+    if mem is not None:
+        # Authorization scenario: an 'access' field is present.
+        if "access" in mem:
+            granted = mem.get("access") == "GRANTED"
+            if granted:
+                detail = (f"PRIVILEGE ESCALATION: the overflow flipped the "
+                          f"'is_admin' guard from 0x00000000 to "
+                          f"{mem.get('authorized_after')}, so the server treated "
+                          f"an ordinary request as ADMIN. A memory bug became an "
+                          f"access-control bypass — the attacker gained control "
+                          f"they were never granted.")
+            else:
+                detail = ("Access correctly DENIED: the input fit the buffer, so "
+                          "the 'is_admin' guard stayed 0x00000000.")
+            return {
+                "outcome": "escalated" if granted else "ok",
+                "detail": detail,
+                "access": mem.get("access"),
+                "memory": mem,
+                "stdout": stdout, "stderr": stderr, "exit": rc,
+            }
+        corrupted = mem.get("verdict") == "CORRUPTED"
+        if corrupted:
+            detail = (f"INTEGRITY VIOLATION: the overflow wrote "
+                      f"{mem['bytes_past_buffer']} byte(s) past the 16-byte buffer "
+                      f"into the adjacent 'authorized' variable, changing it from "
+                      f"0x00000000 to {mem.get('authorized_after')} "
+                      f"(those bytes decode to '{mem['neighbour_chars']}' — your "
+                      f"input literally spilled into the neighbour).")
+        else:
+            detail = ("No corruption: the input fit within the 16-byte buffer, so "
+                      "the adjacent 'authorized' variable stayed 0x00000000.")
         return {
-            "outcome": "corrupted",
-            "detail": "The overflow crossed a buffer boundary and corrupted an "
-                      "adjacent variable in memory (integrity impact).",
+            "outcome": "corrupted" if corrupted else "ok",
+            "detail": detail,
+            "memory": mem,
             "stdout": stdout, "stderr": stderr, "exit": rc,
         }
 
@@ -217,6 +262,29 @@ def verify():
         "vulnerable": analyse(VULN_BIN),
         "hardened": analyse(HARD_BIN),
     })
+
+
+@app.route("/api/vuln/auth", methods=["POST"])
+def vuln_auth():
+    """Authorization-bypass demo: overflow flips an adjacent is_admin guard."""
+    data = request.get_json(force=True)
+    return jsonify(run_native(VULN_BIN, "auth-unsafe", data.get("input", "")))
+
+
+@app.route("/api/secure/auth", methods=["POST"])
+def secure_auth():
+    """Same guard, bounded copy: the is_admin flag stays 0, access stays denied."""
+    data = request.get_json(force=True)
+    return jsonify(run_native(VULN_BIN, "auth-safe", data.get("input", "")))
+
+
+@app.route("/api/secure/corrupt-safe", methods=["POST"])
+def secure_corrupt_safe():
+    """Same struct layout as scenario 2 (buffer + adjacent 'authorized'), but a
+    bounded copy is used, so the neighbour stays intact. This is the direct
+    contrast to /api/vuln/corrupt and emits the same memory-evidence fields."""
+    data = request.get_json(force=True)
+    return jsonify(run_native(VULN_BIN, "flag-safe", data.get("input", "")))
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-# Buffer Overflow (Server Side) — Demonstration & Defence
+# Buffer Overflow (Server-Side) — Demonstration & Defence
 
 A self-contained, **localhost-only** web application that demonstrates a **real
 buffer overflow in native C** running behind a web server, and contrasts the
@@ -8,7 +8,26 @@ languages).
 
 ---
 
-## 1. What this demo is about
+## Table of contents
+1. [What this demo is](#1-what-this-demo-is)
+2. [The theory in brief](#2-the-theory-in-brief)
+3. [How the system works](#3-how-the-system-works)
+4. [Every file explained](#4-every-file-explained)
+5. [The C program explained](#5-the-c-program-explained-nativebufferdemoc)
+6. [The compiler flags explained](#6-the-compiler-flags-explained-nativemakefile)
+7. [Installing Docker](#7-installing-docker)
+8. [Building & deploying](#8-building--deploying)
+9. [How to demonstrate (step by step)](#9-how-to-demonstrate-step-by-step)
+10. [Proving it is real (backend evidence)](#10-proving-it-is-real-backend-evidence)
+11. [Viewing logs in the container](#11-viewing-logs-in-the-container)
+12. [Prevention techniques](#12-prevention-techniques)
+13. [Ties to real-world attacks](#13-ties-to-real-world-attacks)
+14. [Troubleshooting](#14-troubleshooting)
+15. [Viva talking points](#15-viva-talking-points)
+
+---
+
+## 1. What this demo is
 
 A web page with four buttons. Each button sends your input to a small **native C
 program** that runs on the server as an **isolated subprocess**. Depending on the
@@ -88,10 +107,10 @@ the network beyond the single port you publish.
 
 ---
 
-## 4. In details 
+## 4. Every file explained
 
 ```
-cs-buffer-overflow-gui/
+buffer-overflow-demo/
 ├── Dockerfile            # recipe to build the container image
 ├── requirements.txt      # Python dependencies (just Flask)
 ├── app.py                # the Flask web server + subprocess orchestration + logging
@@ -139,7 +158,7 @@ into the image (they are rebuilt inside the container).
 
 ---
 
-## 5. Code explanation (`native/bufferdemo.c`)
+## 5. The C program explained (`native/bufferdemo.c`)
 
 The program takes two command-line arguments: a **mode** and an **input string**,
 and dispatches to one of four functions.
@@ -205,7 +224,7 @@ and safely aborted. Run `make` to build both, `make test` to run all scenarios,
 ## 7. Installing Docker
 
 Docker runs the whole demo, so you do **not** need to install gcc, make, Python,
-or Java on your computer — the container provides them.
+ on your computer — the container provides them.
 
 ### Windows 10/11
 1. Ensure virtualization is enabled in BIOS (most modern PCs have it on).
@@ -216,24 +235,6 @@ or Java on your computer — the container provides them.
 4. Launch Docker Desktop and wait until the whale icon in the system tray says
    "Docker Desktop is running".
 5. Verify in a terminal: `docker --version`.
-
-### macOS
-1. Download **Docker Desktop for Mac** (choose Apple Silicon or Intel to match
-   your Mac) from docker.com and install it.
-2. Launch it and wait until it reports running.
-3. Verify: `docker --version`.
-
-### Linux (Ubuntu/Debian)
-```
-sudo apt update && sudo apt install -y docker.io
-sudo systemctl enable --now docker
-sudo usermod -aG docker $USER     # then log out/in so you can run docker without sudo
-docker --version
-```
-
-> Docker Desktop must be **running** before you build/run. If you see
-> "cannot connect to the Docker daemon", start Docker Desktop first.
-
 ---
 
 ## 8. Building & deploying
@@ -266,7 +267,7 @@ docker stop bof
 
 ---
 
-## 9. Demonstration guide - step by step
+## 9. How to demonstrate (step by step)
 
 Open `http://localhost:5001` and run the buttons in this order — it tells a story
 from "the bug is real and harmful" to "the defences stop it." The result appears
@@ -294,7 +295,7 @@ entirely."*
 
 ---
 
-## 10. Backend evidence
+## 10. Proving it is real (backend evidence)
 
 The outcomes are produced by the **operating system**, not invented by the web
 app. Three proofs, all visible in the browser:
@@ -337,9 +338,6 @@ docker exec bof cat /app/demo.log
 
 # Copy the log file out for your report appendix:
 docker cp bof:/app/demo.log .
-
-# Continues log monitoring
-docker logs -f bof
 ```
 
 A nice presentation setup: browser on one side, `docker logs -f bof` on the other,
@@ -382,3 +380,26 @@ figures against primary sources (CERT advisories) before quoting them in a repor
 
 ---
 
+## 14. Troubleshooting
+
+**`'make' is not recognized` (Windows).** You ran `make` directly on Windows,
+which has no `make`/`gcc`. Use Docker instead (section 8); the build runs `make`
+*inside* the container.
+
+**`fatal error: stdio.h: No such file or directory` during build.** The C headers
+were missing. The Dockerfile installs `build-essential` (which bundles gcc, make,
+and the headers); make sure your Dockerfile's apt line says `build-essential`, then
+`docker build` again.
+
+**`Bind for 0.0.0.0:5000 failed: port is already allocated`.** Another process is
+using that host port. Map a different one: `docker run -d --rm -p 5001:5000 --name
+bof bof-demo` and open `http://localhost:5001`. To find the culprit on Windows:
+`netstat -ano | findstr :5000`.
+
+**`Cannot connect to the Docker daemon`.** Docker Desktop is not running — start it
+and wait for the "running" status, then retry.
+
+**Code changes not taking effect.** Docker caches the old image. Rebuild with
+`docker build -t bof-demo .` before running again.
+
+---

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Server-Side Buffer Overflow — Demo &amp; Defence</title>
+<title>Server-Side Buffer Overflow — Demonstration &amp; Defence</title>
 <style>
   :root {
     --bg:#0f1419; --panel:#1a2230; --ink:#e6edf3; --muted:#8b98a9;
@@ -13,106 +13,163 @@
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);
        font-family:system-ui,Segoe UI,Roboto,sans-serif;line-height:1.5}
-  header{padding:28px 32px;border-bottom:1px solid var(--line)}
-  h1{margin:0 0 4px;font-size:1.5rem}
-  .sub{color:var(--muted);font-size:.9rem}
-  main{max-width:980px;margin:0 auto;padding:24px 32px}
-  .note{background:#1d2a1f;border:1px solid #2a4a2f;border-radius:8px;
-        padding:12px 16px;font-size:.85rem;color:#b6e6bd;margin-bottom:24px}
-  textarea{width:100%;min-height:70px;background:#0b1017;color:var(--ink);
+  header{padding:22px 32px;border-bottom:1px solid var(--line)}
+  h1{margin:0;font-size:1.35rem}
+  main{max-width:980px;margin:0 auto;padding:22px 32px}
+  textarea{width:100%;min-height:62px;background:#0b1017;color:var(--ink);
            border:1px solid var(--line);border-radius:8px;padding:12px;
            font-family:var(--mono);font-size:.9rem;resize:vertical}
-  .row{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 4px}
-  button{border:0;border-radius:7px;padding:9px 14px;font-size:.85rem;
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 0}
+  button{border:0;border-radius:7px;padding:10px 14px;font-size:.85rem;
          font-weight:600;cursor:pointer;color:#0b1017}
   .preset{background:#26323f;color:var(--ink);font-weight:500}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px}
-  @media(max-width:760px){.grid{grid-template-columns:1fr}}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px}
-  .card h3{margin:0 0 4px;font-size:1rem}
-  .card p{margin:0 0 12px;color:var(--muted);font-size:.83rem}
   .b-vuln{background:var(--vuln)} .b-safe{background:var(--safe)}
   .b-warn{background:var(--warn)} .b-acc{background:var(--accent)}
-  pre{background:#0b1017;border:1px solid var(--line);border-radius:8px;
-      padding:14px;overflow:auto;font-family:var(--mono);font-size:.82rem;
-      white-space:pre-wrap;word-break:break-word;min-height:42px;margin-top:18px}
+
+  .selgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:6px 0 4px}
+  @media(max-width:760px){.selgrid{grid-template-columns:1fr}}
+  .selector{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+            padding:13px 15px;cursor:pointer;transition:border-color .15s}
+  .selector:hover{border-color:var(--accent)}
+  .selector.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .selector h3{margin:0 0 4px;font-size:.95rem}
+  .selector p{margin:0;color:var(--muted);font-size:.8rem}
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+         padding:18px;margin-top:12px}
+  .panel .lbl{font-size:.88rem;display:block;margin-bottom:8px}
+  .grouplabel{color:var(--muted);font-size:.72rem;text-transform:uppercase;
+              letter-spacing:.05em;margin-top:14px}
+
+  pre{background:#0b1017;border:1px solid var(--line);border-radius:8px;padding:14px;
+      overflow:auto;font-family:var(--mono);font-size:.82rem;white-space:pre-wrap;
+      word-break:break-word;min-height:42px;margin-top:18px}
   .tag{display:inline-block;padding:2px 9px;border-radius:20px;font-size:.72rem;
        font-weight:700;margin-right:8px}
-  .t-crashed{background:var(--vuln);color:#0b1017}
+  .t-crashed,.t-escalated{background:var(--vuln);color:#0b1017}
   .t-corrupted{background:var(--warn);color:#0b1017}
   .t-prevented,.t-rejected,.t-ok{background:var(--safe);color:#0b1017}
   .t-timeout,.t-error,.t-blocked{background:var(--muted);color:#0b1017}
   code{font-family:var(--mono);color:var(--accent)}
+  h2{font-size:1.1rem;border-top:1px solid var(--line);padding-top:22px;margin-top:32px}
 </style>
 </head>
 <body>
 <header>
   <h1>Server-Side Buffer Overflow — Demonstration &amp; Defence</h1>
-  <div class="sub">Native C backend (run as an isolated subprocess) · exploitation impact vs. prevention · localhost lab</div>
 </header>
 <main>
-  <div class="note">
-    Educational/defensive lab. It shows that an overflow <b>crashes</b> the
-    server process (availability impact) and <b>corrupts adjacent memory</b>
-    (integrity impact), and how bounds checking, the stack canary / FORTIFY_SOURCE,
-    and memory-safe design prevent it. It contains no control-flow-hijacking
-    exploit, shellcode, or protection bypasses.
-  </div>
+  <p style="color:var(--muted);font-size:.85rem;margin-top:2px">
+    Select a scenario. Only its inputs, the exploit, and its defences are shown.</p>
 
-  <label for="inp"><b>Input sent to the server</b> (the C buffer is 64 bytes for crash, 16 bytes for corruption):</label>
-  <textarea id="inp">hello</textarea>
-  <div class="row">
-    <button class="preset" onclick="setLen(5)">normal (5)</button>
-    <button class="preset" onclick="setLen(20)">overflow 16-byte buf (20)</button>
-    <button class="preset" onclick="setLen(200)">overflow 64-byte buf (200)</button>
-  </div>
-
-  <div class="grid">
-    <div class="card">
-      <h3 style="color:var(--vuln)">① Exploitation — Crash (availability)</h3>
-      <p>Unsafe <code>strcpy</code> into a 64-byte stack buffer, no protections. Long input smashes the stack → process dies.</p>
-      <button class="b-vuln" onclick="call('/api/vuln/crash')">Send to VULNERABLE server</button>
+  <div class="selgrid">
+    <div id="selA" class="selector" onclick="selectScenario('A')">
+      <h3 style="color:var(--vuln)">A · Crash (availability)</h3>
+      <p>Oversized input into a 64-byte buffer overruns the return address → the server process crashes.</p>
     </div>
-    <div class="card">
-      <h3 style="color:var(--warn)">② Exploitation — Corruption (integrity)</h3>
-      <p>Overflow a 16-byte buffer to overwrite an adjacent <code>authorized</code> variable. Use input length 17–24.</p>
-      <button class="b-warn" onclick="call('/api/vuln/corrupt')">Send to VULNERABLE server</button>
+    <div id="selB" class="selector" onclick="selectScenario('B')">
+      <h3 style="color:var(--warn)">B · Memory corruption (integrity)</h3>
+      <p>A small overflow of a 16-byte buffer overwrites an adjacent variable; the memory panel proves it.</p>
     </div>
-    <div class="card">
-      <h3 style="color:var(--safe)">③ Prevention — Bounds check</h3>
-      <p>Same logic, but the code validates length and uses a bounded copy (<code>snprintf</code>). Oversized input is refused.</p>
-      <button class="b-safe" onclick="call('/api/secure/bounds')">Send to SECURE server</button>
-    </div>
-    <div class="card">
-      <h3 style="color:var(--accent)">④ Prevention — Compiler hardening</h3>
-      <p>Same unsafe source, compiled with <code>-fstack-protector-all</code> + <code>FORTIFY_SOURCE</code>. The overflow is detected and aborted safely.</p>
-      <button class="b-acc" onclick="call('/api/secure/hardened')">Send to HARDENED server</button>
+    <div id="selC" class="selector" onclick="selectScenario('C')">
+      <h3 style="color:var(--vuln)">C · Privilege bypass (control)</h3>
+      <p>The overflow flips an adjacent <code>is_admin</code> guard, so the server treats the request as admin.</p>
     </div>
   </div>
 
-  <pre id="out">Result will appear here…</pre>
+  <!-- Scenario A: Crash -->
+  <div id="panelA" class="panel" style="display:none">
+    <span class="lbl"><b>Input</b> — buffer is <b>64 bytes</b>; long input overflows and smashes the return address.</span>
+    <textarea id="inpA">hello</textarea>
+    <div class="grouplabel">Pick an input</div>
+    <div class="row">
+      <button class="preset" onclick="setLen(5)">normal (5)</button>
+      <button class="preset" onclick="setLen(200)">overflow 64-byte buf (200)</button>
+    </div>
+    <div class="grouplabel">Exploit</div>
+    <div class="row">
+      <button class="b-vuln" onclick="call('/api/vuln/crash')">Run on VULNERABLE server (expect crash)</button>
+    </div>
+    <div class="grouplabel">Defensive mechanisms</div>
+    <div class="row">
+      <button class="b-safe" onclick="call('/api/secure/bounds')">Defense 1 — input validation (reject)</button>
+      <button class="b-acc" onclick="call('/api/secure/hardened')">Defense 2 — compiler hardening (stack canary)</button>
+    </div>
+  </div>
 
-  <h2 style="margin-top:34px;font-size:1.1rem;border-top:1px solid var(--line);padding-top:24px">
-    Backend evidence (proof it is real)</h2>
+  <!-- Scenario B: Corruption -->
+  <div id="panelB" class="panel" style="display:none">
+    <span class="lbl"><b>Input</b> — buffer is <b>16 bytes</b>; use length <b>17–24</b> to overflow into the neighbour.</span>
+    <textarea id="inpB">hello</textarea>
+    <div class="grouplabel">Pick an input</div>
+    <div class="row">
+      <button class="preset" onclick="setLen(5)">normal (5)</button>
+      <button class="preset" onclick="setLen(20)">overflow 16-byte buf (20)</button>
+    </div>
+    <div class="grouplabel">Exploit</div>
+    <div class="row">
+      <button class="b-warn" onclick="call('/api/vuln/corrupt')">Run on VULNERABLE server (expect corruption)</button>
+    </div>
+    <div class="grouplabel">Defensive mechanism</div>
+    <div class="row">
+      <button class="b-safe" onclick="call('/api/secure/corrupt-safe')">Defense — bounded copy (snprintf)</button>
+    </div>
+  </div>
+
+  <!-- Scenario C: Privilege bypass -->
+  <div id="panelC" class="panel" style="display:none">
+    <span class="lbl"><b>Input</b> — a 16-byte buffer sits next to an <code>is_admin</code> guard; use length <b>17–24</b> to flip it.</span>
+    <textarea id="inpC">hello</textarea>
+    <div class="grouplabel">Pick an input</div>
+    <div class="row">
+      <button class="preset" onclick="setLen(5)">normal (5)</button>
+      <button class="preset" onclick="setLen(20)">overflow 16-byte buf (20)</button>
+    </div>
+    <div class="grouplabel">Exploit</div>
+    <div class="row">
+      <button class="b-vuln" onclick="call('/api/vuln/auth')">Run on VULNERABLE server (escalate to admin)</button>
+    </div>
+    <div class="grouplabel">Defensive mechanism</div>
+    <div class="row">
+      <button class="b-safe" onclick="call('/api/secure/auth')">Defense — bounded copy (snprintf)</button>
+    </div>
+  </div>
+
+  <pre id="out">Select a scenario above to begin…</pre>
+  <div id="mem"></div>
+
+  <h2>Backend evidence (proof it is real)</h2>
   <p style="color:var(--muted);font-size:.85rem;margin-top:0">
-    Everything below is produced on the server. The log panel updates live as you
-    click above; "Verify protections" inspects the actual compiled binaries.</p>
-
+    Produced on the server. The log panel updates live as you click; "Verify
+    protections" inspects the actual compiled binaries.</p>
   <div class="row" style="margin-bottom:6px">
-    <button class="b-acc" onclick="verify()">🔍 Verify protections (objdump / readelf)</button>
-    <button class="preset" onclick="refreshLogs()">↻ Refresh backend log</button>
+    <button class="b-acc" onclick="verify()">Verify protections (objdump / readelf)</button>
+    <button class="preset" onclick="refreshLogs()">Refresh backend log</button>
   </div>
   <pre id="verify">Click "Verify protections" to inspect the two binaries on the backend…</pre>
-
   <div style="color:var(--muted);font-size:.8rem;margin:14px 0 4px">Live backend log (newest at bottom):</div>
   <pre id="logs" style="max-height:260px">backend log will stream here…</pre>
 </main>
 
 <script>
-function setLen(n){ document.getElementById('inp').value = 'A'.repeat(n); }
+let active = null;
+
+function selectScenario(s){
+  active = s;
+  ['A','B','C'].forEach(x => {
+    document.getElementById('panel'+x).style.display = (x===s) ? 'block' : 'none';
+    document.getElementById('sel'+x).classList.toggle('sel', x===s);
+  });
+  document.getElementById('out').textContent = 'Result will appear here…';
+  document.getElementById('mem').innerHTML = '';
+}
+
+function activeInput(){ return document.getElementById('inp'+active); }
+function setLen(n){ if(active){ activeInput().value = 'A'.repeat(n); } }
 
 async function call(url){
-  const input = document.getElementById('inp').value;
+  if(!active){ return; }
+  const input = activeInput().value;
   const out = document.getElementById('out');
   out.textContent = 'Running on the server…';
   try {
@@ -125,12 +182,47 @@ async function call(url){
     out.innerHTML =
       tag + (d.signal ? `signal: ${d.signal}\n` : '\n') +
       `\n${d.detail}\n` +
+      (d.access ? `\n[access decision] ${d.access}` : '') +
       (d.binary ? `\n[executed binary] ${d.binary}` : '') +
       (d.stdout ? `\n[stdout]\n${escapeHtml(d.stdout)}` : '') +
       (d.stderr ? `\n[stderr]\n${escapeHtml(d.stderr)}` : '') +
       (d.exit!==undefined ? `\n\n[exit code] ${d.exit}` : '');
-    refreshLogs();   // pull the matching backend log lines immediately
+    refreshLogs();
+    renderMemory(d.memory);
   } catch(e){ out.textContent = 'Request failed: ' + e; }
+}
+
+// Visual proof that the overflow reached ADJACENT memory.
+function renderMemory(mem){
+  const el = document.getElementById('mem');
+  if(!mem){ el.innerHTML = ''; return; }
+  const corrupted = mem.verdict === 'CORRUPTED';
+  const past = Number(mem.bytes_past_buffer || 0);
+  let cells = '';
+  for(let i=0;i<20;i++){
+    const isNeighbour = i>=16;
+    const bg = isNeighbour ? (corrupted && i < 16+Math.min(4,past) ? '#ff5d5d' : '#26323f')
+                           : (i < Number(mem.input_len||0) ? '#e3b341' : '#1a2230');
+    const col = (bg==='#e3b341'||bg==='#ff5d5d') ? '#0b1017' : '#8b98a9';
+    cells += `<span style="display:inline-block;width:20px;height:24px;line-height:24px;
+      text-align:center;margin:1px;border-radius:3px;font-size:.7rem;background:${bg};color:${col}">
+      ${i<16?'b':'A'}</span>`;
+  }
+  el.innerHTML = `
+   <div style="background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-top:14px">
+     <b style="color:${corrupted?'#ff5d5d':'#3fb950'}">Adjacent-memory proof</b>
+     <table style="width:100%;border-collapse:collapse;margin:10px 0;font-family:var(--mono);font-size:.8rem">
+       <tr><td style="color:var(--muted);padding:3px 8px">address of buffer</td><td>${mem.addr_buf}</td></tr>
+       <tr><td style="color:var(--muted);padding:3px 8px">address of guard variable</td><td>${mem.addr_authorized}</td></tr>
+       <tr><td style="color:var(--muted);padding:3px 8px">gap between them</td><td>${mem.gap_bytes} bytes  → the guard sits immediately after the 16-byte buffer (adjacent)</td></tr>
+       <tr><td style="color:var(--muted);padding:3px 8px">guard value BEFORE</td><td>${mem.authorized_before}</td></tr>
+       <tr><td style="color:var(--muted);padding:3px 8px">guard value AFTER</td><td style="color:${corrupted?'#ff5d5d':'#3fb950'}">${mem.authorized_after} ${corrupted?'← overwritten!':'(unchanged)'}</td></tr>
+       <tr><td style="color:var(--muted);padding:3px 8px">those bytes decode to</td><td>"${mem.neighbour_chars}" ${corrupted?'(your input bytes that spilled over)':''}</td></tr>
+       <tr><td style="color:var(--muted);padding:3px 8px">bytes past the buffer</td><td>${past}</td></tr>
+     </table>
+     <div style="margin:6px 0 4px;color:var(--muted);font-size:.75rem">memory layout (b = buffer byte, A = your input; red = overwrote the neighbour):</div>
+     <div>${cells}<span style="margin-left:8px;color:var(--muted);font-size:.72rem">|&larr; 16-byte buffer &rarr;|&larr; guard &rarr;|</span></div>
+   </div>`;
 }
 
 async function verify(){
@@ -140,8 +232,8 @@ async function verify(){
     const d = await (await fetch('/api/verify')).json();
     const fmt = (name, b) => b.exists
       ? `${name}\n`
-        + `  stack canary (__stack_chk_fail) refs : ${b.stack_canary_refs} ${b.stack_canary_refs>0?'✅ present':'❌ absent'}\n`
-        + `  non-executable stack (NX)            : ${b.nx_stack?'✅ yes':'❌ no'}\n`
+        + `  stack canary (__stack_chk_fail) refs : ${b.stack_canary_refs} ${b.stack_canary_refs>0?'present':'absent'}\n`
+        + `  non-executable stack (NX)            : ${b.nx_stack?'yes':'no'}\n`
         + `  size / sha256                        : ${b.size_bytes} bytes / ${b.sha256}…\n`
       : `${name}: not built\n`;
     v.innerHTML =
@@ -159,11 +251,10 @@ async function refreshLogs(){
     const d = await (await fetch('/api/backend-logs')).json();
     const el = document.getElementById('logs');
     el.textContent = d.lines.join('\n') || '(no backend activity yet)';
-    el.scrollTop = el.scrollHeight;   // keep newest in view
+    el.scrollTop = el.scrollHeight;
   } catch(e){ /* ignore transient errors */ }
 }
 
-// Stream the backend log continuously so the panel is always current.
 setInterval(refreshLogs, 1500);
 refreshLogs();
 

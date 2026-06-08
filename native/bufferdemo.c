@@ -1,5 +1,5 @@
 /*
- * bufferdemo.c — EDUCATIONAL buffer-overflow demonstration (defensive lab).
+ * bufferdemo.c — buffer-overflow demonstration.
  *
  * This program is run as a short-lived SUBPROCESS by the web application. Running
  * it as a subprocess is itself a safety measure: if the vulnerable code crashes,
@@ -11,12 +11,6 @@
  *   safe        - bounded copy + explicit length validation           -> never overflows
  *   flag-unsafe - overflow corrupts an ADJACENT variable (integrity)  -> shows corruption
  *   flag-safe   - same logic, bounded                                  -> stays correct
- *
- * IMPORTANT: This file intentionally contains NO exploit: there is no
- * return-address hijacking, no shellcode, no ASLR/DEP/canary bypass. It only
- * demonstrates (a) that an overflow causes a crash / corruption, and (b) how the
- * safe versions and compiler protections prevent it. That is the full educational
- * scope of the lab.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -57,37 +51,101 @@ static int run_safe(const char *input) {
  * and corrupts neighbouring data — the defining property of memory corruption
  * (and what distinguishes it from mere heap exhaustion). */
 static int run_flag_unsafe(const char *input) {
-    struct { char buf[16]; volatile int authorized; } frame;
-    frame.authorized = 0;                         /* user is NOT authorized    */
+    struct { char buf[16]; volatile unsigned int authorized; } frame;
+    frame.authorized = 0u;                        /* user is NOT authorized    */
+    unsigned long a_buf  = (unsigned long)(void *) frame.buf;
+    unsigned long a_auth = (unsigned long)(void *) &frame.authorized;
+    unsigned int before  = frame.authorized;
     strcpy(frame.buf, input);                     /* overflow past 16 bytes... */
-    if (frame.authorized != 0) {
-        printf("INTEGRITY VIOLATION: adjacent 'authorized' was corrupted to 0x%x "
-               "by the overflow.\n", frame.authorized);
-        printf("A %zu-byte input overran a 16-byte buffer and changed neighbouring "
-               "memory.\n", strlen(input));
-        return 3;
-    }
-    printf("ok (flag-unsafe): authorized=%d (no corruption for this input).\n",
-           frame.authorized);
-    return 0;
+    unsigned int after   = frame.authorized;
+
+    /* Structured, machine-parseable evidence. The web app turns these key=value
+       lines into a memory-corruption panel. The two addresses prove buf and
+       authorized live side by side; the gap (= 16) is the buffer size, so
+       authorized sits immediately after the buffer. */
+    printf("addr_buf=0x%lx\n", a_buf);
+    printf("addr_authorized=0x%lx\n", a_auth);
+    printf("gap_bytes=%ld\n", (long)(a_auth - a_buf));
+    printf("buffer_size=16\n");
+    printf("input_len=%zu\n", strlen(input));
+    printf("authorized_before=0x%08x\n", before);
+    printf("authorized_after=0x%08x\n", after);
+    printf("verdict=%s\n", after != 0u ? "CORRUPTED" : "OK");
+    return after != 0u ? 3 : 0;
 }
 
 /* --- SAFE (integrity): bounded copy keeps the neighbour intact. --- */
 static int run_flag_safe(const char *input) {
-    struct { char buf[16]; volatile int authorized; } frame;
-    frame.authorized = 0;
-    if (strlen(input) >= sizeof(frame.buf)) {
-        fprintf(stderr, "rejected: input too long for 16-byte buffer. No overflow.\n");
-        return 2;
-    }
+    struct { char buf[16]; volatile unsigned int authorized; } frame;
+    frame.authorized = 0u;
+    unsigned long a_buf  = (unsigned long)(void *) frame.buf;
+    unsigned long a_auth = (unsigned long)(void *) &frame.authorized;
+    /* Bounded copy: snprintf writes at most 15 chars + a NUL terminator, so even
+       an oversized input is safely TRUNCATED and can never reach 'authorized'.
+       We emit the same evidence fields so the UI can show the neighbour intact. */
     snprintf(frame.buf, sizeof(frame.buf), "%s", input);
-    printf("ok (flag-safe): authorized=%d (neighbour intact).\n", frame.authorized);
+    unsigned int after = frame.authorized;
+    printf("addr_buf=0x%lx\n", a_buf);
+    printf("addr_authorized=0x%lx\n", a_auth);
+    printf("gap_bytes=%ld\n", (long)(a_auth - a_buf));
+    printf("buffer_size=16\n");
+    printf("input_len=%zu\n", strlen(input));
+    printf("authorized_before=0x%08x\n", 0u);
+    printf("authorized_after=0x%08x\n", after);
+    printf("verdict=%s\n", after != 0u ? "CORRUPTED" : "OK");
+    return 0;
+}
+
+/* --- VULNERABLE (authorization bypass): overflow flips an is_admin gate. ---
+ * This shows the SECURITY CONSEQUENCE of memory corruption: an overflow of a
+ * local buffer overwrites an adjacent 'is_admin' flag, so the program makes its
+ * access-control decision on corrupted data and treats an ordinary request as an
+ * administrator. It is the same mechanism as flag-unsafe, framed as a privilege
+ * escalation. It contains NO code execution / shellcode / control-flow hijack —
+ * it only demonstrates that corrupting a guard variable subverts a check. */
+static int run_auth_unsafe(const char *input) {
+    struct { char buf[16]; volatile unsigned int is_admin; } frame;
+    frame.is_admin = 0u;                          /* request is NOT admin      */
+    unsigned long a_buf  = (unsigned long)(void *) frame.buf;
+    unsigned long a_flag = (unsigned long)(void *) &frame.is_admin;
+    strcpy(frame.buf, input);                     /* overflow can flip is_admin */
+    unsigned int after = frame.is_admin;
+    printf("addr_buf=0x%lx\n", a_buf);
+    printf("addr_authorized=0x%lx\n", a_flag);
+    printf("gap_bytes=%ld\n", (long)(a_flag - a_buf));
+    printf("buffer_size=16\n");
+    printf("input_len=%zu\n", strlen(input));
+    printf("authorized_before=0x%08x\n", 0u);
+    printf("authorized_after=0x%08x\n", after);
+    printf("verdict=%s\n", after != 0u ? "CORRUPTED" : "OK");
+    /* The access-control decision is made on the (possibly corrupted) flag. */
+    printf("access=%s\n", after != 0u ? "GRANTED" : "DENIED");
+    return after != 0u ? 4 : 0;
+}
+
+/* --- SAFE (authorization): bounded copy keeps the is_admin gate intact. --- */
+static int run_auth_safe(const char *input) {
+    struct { char buf[16]; volatile unsigned int is_admin; } frame;
+    frame.is_admin = 0u;
+    unsigned long a_buf  = (unsigned long)(void *) frame.buf;
+    unsigned long a_flag = (unsigned long)(void *) &frame.is_admin;
+    snprintf(frame.buf, sizeof(frame.buf), "%s", input);  /* bounded: truncates */
+    unsigned int after = frame.is_admin;
+    printf("addr_buf=0x%lx\n", a_buf);
+    printf("addr_authorized=0x%lx\n", a_flag);
+    printf("gap_bytes=%ld\n", (long)(a_flag - a_buf));
+    printf("buffer_size=16\n");
+    printf("input_len=%zu\n", strlen(input));
+    printf("authorized_before=0x%08x\n", 0u);
+    printf("authorized_after=0x%08x\n", after);
+    printf("verdict=%s\n", after != 0u ? "CORRUPTED" : "OK");
+    printf("access=%s\n", after != 0u ? "GRANTED" : "DENIED");
     return 0;
 }
 
 int main(int argc, char **argv) {
     if (argc < 3) {
-        fprintf(stderr, "usage: %s <unsafe|safe|flag-unsafe|flag-safe> <input>\n", argv[0]);
+        fprintf(stderr, "usage: %s <unsafe|safe|flag-unsafe|flag-safe|auth-unsafe|auth-safe> <input>\n", argv[0]);
         return 1;
     }
     const char *mode = argv[1];
@@ -97,6 +155,8 @@ int main(int argc, char **argv) {
     if (strcmp(mode, "safe") == 0)         return run_safe(input);
     if (strcmp(mode, "flag-unsafe") == 0)  return run_flag_unsafe(input);
     if (strcmp(mode, "flag-safe") == 0)    return run_flag_safe(input);
+    if (strcmp(mode, "auth-unsafe") == 0)  return run_auth_unsafe(input);
+    if (strcmp(mode, "auth-safe") == 0)    return run_auth_safe(input);
 
     fprintf(stderr, "unknown mode: %s\n", mode);
     return 1;
