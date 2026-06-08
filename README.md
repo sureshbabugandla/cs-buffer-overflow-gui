@@ -267,7 +267,7 @@ docker stop bof
 
 ---
 
-## 9. How to demonstrate (step by step)
+## 9. Step by step in detail
 
 Open `http://localhost:5001` and run the buttons in this order — it tells a story
 from "the bug is real and harmful" to "the defences stop it." The result appears
