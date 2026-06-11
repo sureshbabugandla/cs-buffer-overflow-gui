@@ -29,7 +29,7 @@ languages).
 
 ## 1. What this demo is
 
-A web page with four buttons. Each button sends your input to a small **native C
+A web page with four buttons. Each button sends the input to a small **native C
 program** that runs on the server as an **isolated subprocess**. Depending on the
 input and which version of the program runs, you observe one of four outcomes:
 
