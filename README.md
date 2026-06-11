@@ -218,6 +218,21 @@ The Makefile builds the **same source file** twice with opposite security flags.
 The point: **same code, opposite outcome** — silent corruption/crash vs. detected
 and safely aborted. Run `make` to build both, `make test` to run all scenarios,
 `make clean` to remove the binaries.
+
+### Safety checks enabled in Defense 2 (compiler hardening)
+
+- **Stack canary** (`-fstack-protector-all`) — like a tripwire placed just before
+  the important exit door in memory. If an overflow crosses it, the alarm trips and
+  the program shuts down before any harm is done.
+- **FORTIFY_SOURCE** (`-D_FORTIFY_SOURCE=2`) — the program double-checks the size
+  before copying, so it refuses to pour 200 things into a 64-thing container.
+- **Optimisation** (`-O2`) — speeds the program up; it is also what lets the
+  size-checking above work.
+- **PIE / ASLR** (`-fPIE -pie`) — shuffles where everything sits in memory each time
+  it runs, so an attacker cannot predict where to strike — like rearranging the rooms
+  in a house every day so a burglar's map is useless.
+- **All warnings** (`-Wall`) — turns on all the compiler's warnings, so sloppy
+  mistakes get caught while building, not after.
 ---
 
 ## 7. Installing Docker
