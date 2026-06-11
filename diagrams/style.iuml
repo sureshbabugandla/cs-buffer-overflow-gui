@@ -1,0 +1,51 @@
+skinparam backgroundColor #FAFBFC
+skinparam roundcorner 12
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 12
+skinparam ArrowColor #64748B
+skinparam ArrowFontColor #475569
+skinparam TitleFontSize 17
+skinparam TitleFontColor #0F172A
+skinparam componentStyle rectangle
+skinparam component {
+  BorderThickness 1.2
+  FontColor #1F2A37
+  BorderColor #2D7FF9
+}
+skinparam rectangle {
+  BorderThickness 1.2
+  FontColor #1F2A37
+  BorderColor #2D7FF9
+}
+skinparam package {
+  FontColor #334155
+  FontStyle bold
+  BorderColor #94A3B8
+}
+skinparam node {
+  BorderColor #2D7FF9
+  FontColor #0F172A
+}
+skinparam database {
+  BackgroundColor #FFF8E1
+  BorderColor #E3A008
+  FontColor #1F2A37
+}
+skinparam note {
+  BackgroundColor #FFFDF0
+  BorderColor #E3A008
+  FontColor #4A3B10
+}
+skinparam sequence {
+  ParticipantBackgroundColor #FFFFFF
+  ParticipantBorderColor #2D7FF9
+  ParticipantFontColor #0F172A
+  ActorBackgroundColor #FFFFFF
+  ActorBorderColor #2D7FF9
+  LifeLineBorderColor #94A3B8
+  LifeLineBackgroundColor #F1F5F9
+  ArrowColor #64748B
+  GroupBackgroundColor #E7F0FF
+  GroupBorderColor #2D7FF9
+}

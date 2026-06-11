@@ -1,6 +1,18 @@
 """
 Flask web application that demonstrates a server-side buffer overflow and its
 prevention, by invoking the native C binaries as isolated SUBPROCESSES.
+
+Design / safety notes
+----------------------
+* The risky native code runs in a child process. If it crashes (SIGSEGV), only
+  the child dies; this Flask server keeps serving and reports the crash. That
+  isolation is itself a defensive technique (sandboxing untrusted/native code).
+* A timeout guards against a hung child.
+* Input length is capped before we ever reach the unsafe path in the "secure"
+  endpoints — the web tier does its own validation (defence in depth).
+* This app contains NO exploit logic: it only triggers the vulnerable binary with
+  user input and reports the observable outcome (success / crash / corruption /
+  prevented), then contrasts it with the safe behaviour.
 """
 import os
 import signal
@@ -10,6 +22,11 @@ from flask import Flask, request, jsonify, render_template
 
 app = Flask(__name__)
 
+# --- Backend audit logging ---------------------------------------------------
+# Every native invocation is logged to BOTH the console (visible via
+# `docker logs <container>` or in the terminal running the container) AND to a
+# file `demo.log`. This is the evidence trail proving the outcomes are real
+# subprocess results, not hardcoded UI text.
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -157,12 +174,22 @@ def _classify(binary: str, mode: str, user_input: str) -> dict:
                 "stdout": stdout, "stderr": stderr, "exit": rc,
             }
         corrupted = mem.get("verdict") == "CORRUPTED"
-        if corrupted:
+        if "secret_before" in mem:
+            if corrupted:
+                detail = (f"INTEGRITY VIOLATION: the {mem.get('input_len')}-byte "
+                          f"input overran the 16-byte buffer and overwrote the "
+                          f"adjacent secret. It was '{mem.get('secret_before')}' "
+                          f"and is now '{mem.get('secret_after')}' — the input "
+                          f"bytes replaced the real token.")
+            else:
+                detail = (f"No corruption: the input fit the 16-byte buffer, so the "
+                          f"adjacent secret '{mem.get('secret_before')}' is intact.")
+        elif corrupted:
             detail = (f"INTEGRITY VIOLATION: the overflow wrote "
                       f"{mem['bytes_past_buffer']} byte(s) past the 16-byte buffer "
                       f"into the adjacent 'authorized' variable, changing it from "
                       f"0x00000000 to {mem.get('authorized_after')} "
-                      f"(those bytes decode to '{mem['neighbour_chars']}' — your "
+                      f"(those bytes decode to '{mem['neighbour_chars']}' — the "
                       f"input literally spilled into the neighbour).")
         else:
             detail = ("No corruption: the input fit within the 16-byte buffer, so "

@@ -1,0 +1,52 @@
+@startuml component
+!include style.iuml
+title Buffer Overflow Demo — System Design (components & responsibilities)
+
+package "Browser  (index.html · vanilla JS)" #E3F2FD {
+  [Scenario selector\n(A Crash / B Corruption / C Privilege)] as sel #FFFFFF
+  [Input presets +\naction buttons] as btn #FFFFFF
+  [Result panel] as res #FFFFFF
+  [Adjacent-memory\nproof panel] as mempanel #FFFFFF
+  [Backend-evidence panel\n(Verify + live log)] as evid #FFFFFF
+  [fetch() API client] as fetchc #FFFFFF
+}
+
+package "Flask app  (app.py)" #E8F5E9 {
+  [Routes\nGET / · POST /api/vuln/{crash,corrupt,auth}\nPOST /api/secure/{bounds,hardened,corrupt-safe,auth}\nGET /api/verify · GET /api/backend-logs] as routes #FFFFFF
+  [run_native()\nlogs INVOKE / RESULT] as runnative #FFFFFF
+  [_classify()\nexit code / signal -> outcome] as classify #FFFFFF
+  [_parse_memory()\naddresses · before/after · decode] as parsemem #FFFFFF
+  [verify()\nobjdump / readelf] as verify #FFFFFF
+  [Logging\nconsole + demo.log + LogBuffer(deque)] as logging #FFFFFF
+}
+
+package "Native layer  (C · compiled by gcc)" #FFF3E0 {
+  [bufferdemo_vuln\n(no protections)] as vuln #FFCDD2
+  [bufferdemo_hardened\n(canary + FORTIFY)] as hard #C8E6C9
+  [modes: unsafe / safe /\nflag-unsafe / flag-safe /\nauth-unsafe / auth-safe] as modes #FFE0B2
+}
+
+package "Operating system" #ECEFF1 {
+  [subprocess /\nprocess manager] as os #FFFFFF
+  [signals:\nSIGSEGV · SIGABRT] as sig #FFFFFF
+}
+
+sel --> btn
+btn --> fetchc
+fetchc --> routes : HTTP JSON
+routes --> runnative
+runnative --> classify
+classify --> parsemem : flag / auth modes
+runnative --> logging
+routes --> verify
+routes --> logging : /api/backend-logs reads buffer
+classify --> os : subprocess.run([...])
+os --> vuln
+os --> hard
+vuln ..> modes
+hard ..> modes
+os --> sig : kills on overflow
+routes --> res : JSON {outcome, detail, memory, access, exit, signal}
+res --> mempanel
+res --> evid
+@enduml

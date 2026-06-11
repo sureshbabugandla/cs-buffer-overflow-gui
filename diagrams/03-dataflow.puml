@@ -1,0 +1,32 @@
+@startuml dataflow
+!include style.iuml
+title Buffer Overflow Demo — Data Flow (Level 1)
+left to right direction
+
+actor User as u
+rectangle "Browser UI\n(scenario + input)" as ui #BBDEFB
+rectangle "Flask route\n(/api/...)" as route #C8E6C9
+rectangle "run_native ->\n_classify" as logic #C8E6C9
+rectangle "C binary\n(subprocess)" as cbin #FFE0B2
+rectangle "_parse_memory\n(decode neighbour)" as mem #C8E6C9
+database "Log buffer (deque)\n+ demo.log" as log
+rectangle "objdump /\nreadelf" as tools #E2E8F0
+
+u --> ui : choose scenario, enter input
+ui --> route : POST JSON { input }
+route --> logic : binary + mode
+logic --> cbin : exec [binary, mode, input]
+cbin --> logic : exit / signal / stdout
+logic --> mem : stdout (flag / auth)
+mem --> logic : addresses, before/after, bytes
+logic --> log : INVOKE / RESULT
+route --> ui : JSON { outcome, detail, memory, access }
+ui --> u : render result + memory proof
+ui --> route : GET /api/backend-logs (poll 1.5s)
+log --> route : recent lines
+route --> ui : { lines:[...] }
+ui --> route : GET /api/verify
+route --> tools : inspect both binaries
+tools --> route : canary refs, NX, size, sha256
+route --> ui : { vulnerable, hardened }
+@enduml

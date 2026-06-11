@@ -1,16 +1,22 @@
 /*
- * bufferdemo.c — buffer-overflow demonstration.
+ * bufferdemo.c — EDUCATIONAL buffer-overflow demonstration (defensive lab).
  *
  * This program is run as a short-lived SUBPROCESS by the web application. Running
  * it as a subprocess is itself a safety measure: if the vulnerable code crashes,
  * only the child process dies — the web server keeps running and simply reports
- * what happened. That isolation mirrors how you would sandbox risky native code.
+ * what happened. That isolation mirrors how risky native code would be sandboxed.
  *
  * It supports four modes (argv[1]) with the user input in argv[2]:
  *   unsafe      - strcpy into a fixed stack buffer (NO bounds check)  -> can crash
  *   safe        - bounded copy + explicit length validation           -> never overflows
  *   flag-unsafe - overflow corrupts an ADJACENT variable (integrity)  -> shows corruption
  *   flag-safe   - same logic, bounded                                  -> stays correct
+ *
+ * IMPORTANT: This file intentionally contains NO exploit: there is no
+ * return-address hijacking, no shellcode, no ASLR/DEP/canary bypass. It only
+ * demonstrates (a) that an overflow causes a crash / corruption, and (b) how the
+ * safe versions and compiler protections prevent it. That is the full educational
+ * scope of the lab.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,55 +50,65 @@ static int run_safe(const char *input) {
     return 0;
 }
 
-/* --- VULNERABLE (integrity): overflow corrupts an ADJACENT variable. ---
- * Using a struct fixes the memory layout so the demo is deterministic: members
- * are laid out in declaration order at increasing addresses, so writing past
- * 'buf' writes into 'authorized'. This shows that an overflow crosses a boundary
- * and corrupts neighbouring data — the defining property of memory corruption
- * (and what distinguishes it from mere heap exhaustion). */
+/* --- VULNERABLE (integrity): overflow OVERWRITES an adjacent SECRET. ---
+ * A sample secret (e.g. a session token) is stored in a 'secret' field placed
+ * immediately after the 16-byte buffer. Overflowing 'buf' spills the attacker's
+ * input into 'secret', replacing the real token with the input bytes. This shows
+ * vividly that a buffer overflow can corrupt sensitive neighbouring data. */
 static int run_flag_unsafe(const char *input) {
-    struct { char buf[16]; volatile unsigned int authorized; } frame;
-    frame.authorized = 0u;                        /* user is NOT authorized    */
-    unsigned long a_buf  = (unsigned long)(void *) frame.buf;
-    unsigned long a_auth = (unsigned long)(void *) &frame.authorized;
-    unsigned int before  = frame.authorized;
-    strcpy(frame.buf, input);                     /* overflow past 16 bytes... */
-    unsigned int after   = frame.authorized;
+    struct { char buf[16]; char secret[32]; } frame;
+    /* The sensitive value living right after the buffer. */
+    strcpy(frame.secret, "AUTH=Adm1n-9F3A7C2E");
+    char before[33];
+    memcpy(before, frame.secret, 32); before[32] = '\0';   /* snapshot original */
 
-    /* Structured, machine-parseable evidence. The web app turns these key=value
-       lines into a memory-corruption panel. The two addresses prove buf and
-       authorized live side by side; the gap (= 16) is the buffer size, so
-       authorized sits immediately after the buffer. */
+    unsigned long a_buf = (unsigned long)(void *) frame.buf;
+    unsigned long a_sec = (unsigned long)(void *) frame.secret;
+
+    strcpy(frame.buf, input);                 /* overflow may clobber the secret */
+
+    /* Read back the secret SAFELY (bound to 32 bytes so the print can't over-read). */
+    char after[33];
+    memcpy(after, frame.secret, 32); after[32] = '\0';
+    int corrupted = (strcmp(before, after) != 0);
+
     printf("addr_buf=0x%lx\n", a_buf);
-    printf("addr_authorized=0x%lx\n", a_auth);
-    printf("gap_bytes=%ld\n", (long)(a_auth - a_buf));
+    printf("addr_secret=0x%lx\n", a_sec);
+    printf("gap_bytes=%ld\n", (long)(a_sec - a_buf));
     printf("buffer_size=16\n");
     printf("input_len=%zu\n", strlen(input));
-    printf("authorized_before=0x%08x\n", before);
-    printf("authorized_after=0x%08x\n", after);
-    printf("verdict=%s\n", after != 0u ? "CORRUPTED" : "OK");
-    return after != 0u ? 3 : 0;
+    printf("secret_before=%s\n", before);
+    printf("secret_after=%s\n", after);
+    printf("verdict=%s\n", corrupted ? "CORRUPTED" : "OK");
+    return corrupted ? 3 : 0;
 }
 
-/* --- SAFE (integrity): bounded copy keeps the neighbour intact. --- */
+/* --- SAFE (integrity): bounded copy keeps the adjacent secret intact. --- */
 static int run_flag_safe(const char *input) {
-    struct { char buf[16]; volatile unsigned int authorized; } frame;
-    frame.authorized = 0u;
-    unsigned long a_buf  = (unsigned long)(void *) frame.buf;
-    unsigned long a_auth = (unsigned long)(void *) &frame.authorized;
-    /* Bounded copy: snprintf writes at most 15 chars + a NUL terminator, so even
-       an oversized input is safely TRUNCATED and can never reach 'authorized'.
-       We emit the same evidence fields so the UI can show the neighbour intact. */
+    struct { char buf[16]; char secret[32]; } frame;
+    strcpy(frame.secret, "AUTH=Adm1n-9F3A7C2E");
+    char before[33];
+    memcpy(before, frame.secret, 32); before[32] = '\0';
+
+    unsigned long a_buf = (unsigned long)(void *) frame.buf;
+    unsigned long a_sec = (unsigned long)(void *) frame.secret;
+
+    /* Bounded copy: snprintf writes at most 15 chars + NUL, so even an oversized
+       input is truncated and can never reach 'secret'. */
     snprintf(frame.buf, sizeof(frame.buf), "%s", input);
-    unsigned int after = frame.authorized;
+
+    char after[33];
+    memcpy(after, frame.secret, 32); after[32] = '\0';
+    int corrupted = (strcmp(before, after) != 0);
+
     printf("addr_buf=0x%lx\n", a_buf);
-    printf("addr_authorized=0x%lx\n", a_auth);
-    printf("gap_bytes=%ld\n", (long)(a_auth - a_buf));
+    printf("addr_secret=0x%lx\n", a_sec);
+    printf("gap_bytes=%ld\n", (long)(a_sec - a_buf));
     printf("buffer_size=16\n");
     printf("input_len=%zu\n", strlen(input));
-    printf("authorized_before=0x%08x\n", 0u);
-    printf("authorized_after=0x%08x\n", after);
-    printf("verdict=%s\n", after != 0u ? "CORRUPTED" : "OK");
+    printf("secret_before=%s\n", before);
+    printf("secret_after=%s\n", after);
+    printf("verdict=%s\n", corrupted ? "CORRUPTED" : "OK");
     return 0;
 }
 

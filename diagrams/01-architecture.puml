@@ -1,0 +1,34 @@
+@startuml architecture
+!include style.iuml
+title Buffer Overflow Demo — Architecture & Deployment (localhost)
+
+actor "User /\nExaminer" as user
+
+node "Host machine (localhost)" as host #F1F5F9 {
+  node "Docker container : bof-demo\n(base image: python:3.12-slim)" as box #E7F0FF {
+    component "Web UI\n(index.html · vanilla JS + fetch)" as ui #BBDEFB
+    component "Flask web app\n(app.py · Werkzeug :5000)" as flask #C8E6C9
+    component "Native C binaries\nbufferdemo_vuln  (no canary)\nbufferdemo_hardened  (canary+FORTIFY)" as bins #FFE0B2
+    database "Log buffer (deque)\n+ demo.log" as logs
+    component "binutils\n(objdump / readelf)" as tools #E2E8F0
+
+    flask --> ui : render_template
+    flask ..> bins : subprocess.run([bin, mode, input])
+    bins ..> flask : exit / signal / stdout
+    flask --> logs : write INVOKE / RESULT
+    logs --> flask : read for /api/backend-logs
+    flask ..> tools : /api/verify inspects binaries
+  }
+}
+user --> flask : HTTP + JSON\n(host 5001 -> container 5000)
+note right of bins
+  Two builds from ONE source file:
+  vuln     = -fno-stack-protector
+  hardened = -fstack-protector-all + FORTIFY
+end note
+note bottom of box
+  One self-contained container.
+  Only port 5001 is published.
+  Runs offline after first build.
+end note
+@enduml

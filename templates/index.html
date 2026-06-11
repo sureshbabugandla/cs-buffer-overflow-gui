@@ -69,7 +69,7 @@
     </div>
     <div id="selB" class="selector" onclick="selectScenario('B')">
       <h3 style="color:var(--warn)">B · Memory corruption (integrity)</h3>
-      <p>A small overflow of a 16-byte buffer overwrites an adjacent variable; the memory panel proves it.</p>
+      <p>A small overflow of a 16-byte buffer overwrites an adjacent <b>secret token</b>; the panel shows the secret before vs. after.</p>
     </div>
     <div id="selC" class="selector" onclick="selectScenario('C')">
       <h3 style="color:var(--vuln)">C · Privilege bypass (control)</h3>
@@ -99,7 +99,7 @@
 
   <!-- Scenario B: Corruption -->
   <div id="panelB" class="panel" style="display:none">
-    <span class="lbl"><b>Input</b> — buffer is <b>16 bytes</b>; use length <b>17–24</b> to overflow into the neighbour.</span>
+    <span class="lbl"><b>Input</b> — a 16-byte buffer sits next to a <b>secret token</b> (<code>AUTH=Adm1n-9F3A7C2E</code>); use length <b>17–24</b> to overflow into it.</span>
     <textarea id="inpB">hello</textarea>
     <div class="grouplabel">Pick an input</div>
     <div class="row">
@@ -140,7 +140,7 @@
 
   <h2>Backend evidence (proof it is real)</h2>
   <p style="color:var(--muted);font-size:.85rem;margin-top:0">
-    Produced on the server. The log panel updates live as you click; "Verify
+    Produced on the server. The log panel updates live on each request; "Verify
     protections" inspects the actual compiled binaries.</p>
   <div class="row" style="margin-bottom:6px">
     <button class="b-acc" onclick="verify()">Verify protections (objdump / readelf)</button>
@@ -197,6 +197,95 @@ function renderMemory(mem){
   const el = document.getElementById('mem');
   if(!mem){ el.innerHTML = ''; return; }
   const corrupted = mem.verdict === 'CORRUPTED';
+
+  // ---- Scenario B: a secret/token stored next to the buffer ----
+  if(mem.secret_before !== undefined){
+    const input = active ? activeInput().value : '';
+    const secret = mem.secret_before || '';
+    // Bytes actually written from buf[0]: strcpy (unsafe) writes the whole input;
+    // snprintf (safe) truncates to 15. Drive the colouring off THIS, not raw length,
+    // so the defence case never shows red in the secret region.
+    const writtenLen = corrupted ? input.length : Math.min(input.length, 15);
+    let cells = '';
+    const total = 16 + secret.length;
+    for(let i=0;i<total;i++){
+      const inBuf = i < 16;
+      const filledByInput = i < writtenLen;               // a byte actually written
+      let ch, bg, col;
+      if(inBuf){
+        ch = filledByInput ? esc(input[i]) : 'b';
+        bg = filledByInput ? '#e3b341' : '#1a2230';
+      } else {
+        const s = i - 16;
+        if(filledByInput){ ch = esc(input[i]); bg = '#ff5d5d'; }   // input overran into secret
+        else { ch = esc(secret[s]); bg = '#2e7d32'; }              // original secret byte
+      }
+      col = (bg==='#1a2230') ? '#8b98a9' : '#0b1017';
+      cells += `<span style="display:inline-block;min-width:18px;height:24px;line-height:24px;
+        text-align:center;margin:1px;padding:0 2px;border-radius:3px;font-size:.7rem;background:${bg};color:${col}">${ch}</span>`;
+    }
+    el.innerHTML = `
+     <div style="background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-top:14px">
+       <b style="color:${corrupted?'#ff5d5d':'#3fb950'}">Adjacent secret — before vs. after the overflow</b>
+       <table style="width:100%;border-collapse:collapse;margin:10px 0;font-family:var(--mono);font-size:.82rem">
+         <tr><td style="color:var(--muted);padding:3px 8px;width:230px">address of buffer</td><td>${mem.addr_buf}</td></tr>
+         <tr><td style="color:var(--muted);padding:3px 8px">address of secret</td><td>${mem.addr_secret}</td></tr>
+         <tr><td style="color:var(--muted);padding:3px 8px">gap between them</td><td>${mem.gap_bytes} bytes → the secret sits immediately after the 16-byte buffer</td></tr>
+         <tr><td colspan="2" style="border-top:1px solid var(--line);padding-top:6px"></td></tr>
+         <tr><td style="color:var(--muted);padding:3px 8px">secret BEFORE overflow</td><td style="color:#3fb950">"${esc(mem.secret_before)}"</td></tr>
+         <tr><td style="color:var(--muted);padding:3px 8px">input (${mem.input_len} bytes)</td><td style="color:#e3b341">"${esc(input)}"</td></tr>
+         <tr><td style="color:var(--muted);padding:3px 8px">secret AFTER overflow</td><td style="color:${corrupted?'#ff5d5d':'#3fb950'};font-weight:600">"${esc(mem.secret_after)}" ${corrupted?'← overwritten by the input':'(intact)'}</td></tr>
+       </table>
+       <div style="margin:6px 0 4px;color:var(--muted);font-size:.75rem">memory bytes (yellow = input in buffer · red = input that spilled into the secret · green = surviving secret):</div>
+       <div>${cells}</div>
+       <div style="margin-top:6px;color:var(--muted);font-size:.72rem">|&larr; 16-byte buffer &rarr;|&larr; secret token &rarr;|</div>
+     </div>`;
+    return;
+  }
+
+  // ---- Scenario C: access-control guard (is_admin) ----
+  if(mem.access !== undefined){
+    const granted = mem.access === 'GRANTED';
+    const input = active ? activeInput().value : '';
+    // Bytes actually written from buf[0]: strcpy (granted/corrupted) writes the
+    // whole input; snprintf (denied/safe) truncates to 15 and never reaches the
+    // guard. Drive colouring/contents off THIS so the defence case shows the
+    // untouched guard bytes ('·'), not the input.
+    const writtenLen = granted ? input.length : Math.min(input.length, 15);
+    let cells = '';
+    for(let i=0;i<20;i++){
+      const inBuf = i < 16;
+      const filled = i < writtenLen;
+      let ch, bg;
+      if(inBuf){ ch = filled ? esc(input[i]) : 'b'; bg = filled ? '#e3b341' : '#1a2230'; }
+      else { ch = filled ? esc(input[i]) : '·'; bg = (granted && filled) ? '#ff5d5d' : '#26323f'; }
+      const col = (bg==='#1a2230'||bg==='#26323f') ? '#8b98a9' : '#0b1017';
+      cells += `<span style="display:inline-block;width:20px;height:24px;line-height:24px;
+        text-align:center;margin:1px;border-radius:3px;font-size:.7rem;background:${bg};color:${col}">${ch}</span>`;
+    }
+    const banner = granted
+      ? `<div style="background:#3a1212;border:1px solid #ff5d5d;color:#ff8a8a;border-radius:8px;padding:10px 12px;margin:4px 0 12px;font-weight:600">ACCESS GRANTED — privilege escalated from USER to ADMIN by the overflow</div>`
+      : `<div style="background:#10241a;border:1px solid #3fb950;color:#7fe0a0;border-radius:8px;padding:10px 12px;margin:4px 0 12px;font-weight:600">ACCESS DENIED — the guard is intact; request is treated as a normal user</div>`;
+    el.innerHTML = `
+     <div style="background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-top:14px">
+       <b style="color:${granted?'#ff5d5d':'#3fb950'}">Access-control guard — before vs. after the overflow</b>
+       ${banner}
+       <table style="width:100%;border-collapse:collapse;margin:2px 0 10px;font-family:var(--mono);font-size:.82rem">
+         <tr><td style="color:var(--muted);padding:3px 8px;width:230px">address of buffer</td><td>${mem.addr_buf}</td></tr>
+         <tr><td style="color:var(--muted);padding:3px 8px">address of is_admin guard</td><td>${mem.addr_authorized}</td></tr>
+         <tr><td style="color:var(--muted);padding:3px 8px">gap between them</td><td>${mem.gap_bytes} bytes → the guard sits immediately after the 16-byte buffer</td></tr>
+         <tr><td colspan="2" style="border-top:1px solid var(--line);padding-top:6px"></td></tr>
+         <tr><td style="color:var(--muted);padding:3px 8px">is_admin BEFORE</td><td style="color:#3fb950">${mem.authorized_before} → role: user · access: DENIED</td></tr>
+         <tr><td style="color:var(--muted);padding:3px 8px">input (${mem.input_len} bytes)</td><td style="color:#e3b341">"${esc(input)}"</td></tr>
+         <tr><td style="color:var(--muted);padding:3px 8px">is_admin AFTER</td><td style="color:${granted?'#ff5d5d':'#3fb950'};font-weight:600">${mem.authorized_after} → role: ${granted?'admin':'user'} · access: ${mem.access}</td></tr>
+       </table>
+       <div style="margin:6px 0 4px;color:var(--muted);font-size:.75rem">memory bytes (yellow = input in buffer · red = input that overwrote the guard):</div>
+       <div>${cells}<span style="margin-left:8px;color:var(--muted);font-size:.72rem">|&larr; 16-byte buffer &rarr;|&larr; is_admin &rarr;|</span></div>
+     </div>`;
+    return;
+  }
+
+  // ---- Fallback: generic guard variable next to the buffer ----
   const past = Number(mem.bytes_past_buffer || 0);
   let cells = '';
   for(let i=0;i<20;i++){
@@ -217,13 +306,15 @@ function renderMemory(mem){
        <tr><td style="color:var(--muted);padding:3px 8px">gap between them</td><td>${mem.gap_bytes} bytes  → the guard sits immediately after the 16-byte buffer (adjacent)</td></tr>
        <tr><td style="color:var(--muted);padding:3px 8px">guard value BEFORE</td><td>${mem.authorized_before}</td></tr>
        <tr><td style="color:var(--muted);padding:3px 8px">guard value AFTER</td><td style="color:${corrupted?'#ff5d5d':'#3fb950'}">${mem.authorized_after} ${corrupted?'← overwritten!':'(unchanged)'}</td></tr>
-       <tr><td style="color:var(--muted);padding:3px 8px">those bytes decode to</td><td>"${mem.neighbour_chars}" ${corrupted?'(your input bytes that spilled over)':''}</td></tr>
+       <tr><td style="color:var(--muted);padding:3px 8px">those bytes decode to</td><td>"${mem.neighbour_chars}" ${corrupted?'(input bytes that spilled over)':''}</td></tr>
        <tr><td style="color:var(--muted);padding:3px 8px">bytes past the buffer</td><td>${past}</td></tr>
      </table>
-     <div style="margin:6px 0 4px;color:var(--muted);font-size:.75rem">memory layout (b = buffer byte, A = your input; red = overwrote the neighbour):</div>
+     <div style="margin:6px 0 4px;color:var(--muted);font-size:.75rem">memory layout (b = buffer byte, A = input; red = overwrote the neighbour):</div>
      <div>${cells}<span style="margin-left:8px;color:var(--muted);font-size:.72rem">|&larr; 16-byte buffer &rarr;|&larr; guard &rarr;|</span></div>
    </div>`;
 }
+
+function esc(s){ return (s===undefined||s===null) ? '' : String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 
 async function verify(){
   const v = document.getElementById('verify');
