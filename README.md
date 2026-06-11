@@ -31,7 +31,7 @@ languages).
 
 A web page with four buttons. Each button sends the input to a small **native C
 program** that runs on the server as an **isolated subprocess**. Depending on the
-input and which version of the program runs, you observe one of four outcomes:
+input and which version of the program runs, can be observed one of four outcomes in UI:
 
 | # | Button | What it shows |
 |---|---|---|
@@ -87,7 +87,7 @@ real buffer overflow.
 ## 3. How the system works
 
 ```
-  Browser (your machine)
+  Browser (Local machine)
       │  HTTP (JSON) on localhost:5001
       ▼
   Flask web app  (app.py)          ← Python; the "web server"
@@ -102,8 +102,8 @@ real buffer overflow.
   Browser renders the result + a live backend-log panel
 ```
 
-Everything runs inside one Docker container on your laptop. Nothing is exposed to
-the network beyond the single port you publish.
+Everything runs inside one Docker container. Nothing is exposed to
+the network beyond the single port published.
 
 ---
 
