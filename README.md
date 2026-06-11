@@ -9,7 +9,7 @@ languages).
 ---
 
 ## Table of contents
-1. [What this demo is](#1-what-this-demo-is)
+1. [What this application is](#1-what-this-demo-is)
 2. [The theory in brief](#2-the-theory-in-brief)
 3. [How the system works](#3-how-the-system-works)
 4. [Every file explained](#4-every-file-explained)
@@ -27,7 +27,7 @@ languages).
 
 ---
 
-## 1. What this demo is
+## 1. What this application is
 
 A web page with four buttons. Each button sends the input to a small **native C
 program** that runs on the server as an **isolated subprocess**. Depending on the
