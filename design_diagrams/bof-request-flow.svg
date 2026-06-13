@@ -1,0 +1,154 @@
+<svg viewBox="0 0 1180 790" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+  <defs>
+    <linearGradient id="gBrowser" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#EFF5FF"/><stop offset="1" stop-color="#E1ECFF"/>
+    </linearGradient>
+    <linearGradient id="gFlask" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#EDF8F1"/><stop offset="1" stop-color="#DCF2E5"/>
+    </linearGradient>
+    <linearGradient id="gNative" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFF6EA"/><stop offset="1" stop-color="#FFEBD2"/>
+    </linearGradient>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="1.5" stdDeviation="2.2" flood-color="#1f2a37" flood-opacity="0.18"/>
+    </filter>
+    <marker id="aB" markerWidth="11" markerHeight="11" refX="8" refY="4" orient="auto"><path d="M0,0 L9,4 L0,8 z" fill="#2D7FF9"/></marker>
+    <marker id="aA" markerWidth="11" markerHeight="11" refX="8" refY="4" orient="auto"><path d="M0,0 L9,4 L0,8 z" fill="#E3A008"/></marker>
+    <marker id="aP" markerWidth="11" markerHeight="11" refX="8" refY="4" orient="auto"><path d="M0,0 L9,4 L0,8 z" fill="#7C3AED"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="1180" height="790" fill="#FBFCFE"/>
+
+  <!-- Title -->
+  <text x="590" y="36" text-anchor="middle" font-size="22" font-weight="700" fill="#0F172A">Buffer Overflow Demo — Request Flow, Live Logs &amp; Protection Verification</text>
+  <text x="590" y="58" text-anchor="middle" font-size="13" fill="#64748B">Solid arrow = request / forward    ·    dashed arrow = response / return</text>
+
+  <!-- ===== ZONES ===== -->
+  <rect x="30"  y="80" width="300" height="566" rx="16" fill="url(#gBrowser)" stroke="#9DBEF0" stroke-width="1.5"/>
+  <rect x="430" y="80" width="330" height="566" rx="16" fill="url(#gFlask)"   stroke="#9AD3B4" stroke-width="1.5"/>
+  <rect x="850" y="80" width="300" height="566" rx="16" fill="url(#gNative)"  stroke="#F0C887" stroke-width="1.5"/>
+  <text x="180"  y="108" text-anchor="middle" font-size="15" font-weight="700" fill="#1B4FA0">BROWSER  ·  HTML + JS</text>
+  <text x="595"  y="108" text-anchor="middle" font-size="15" font-weight="700" fill="#1E6B3D">FLASK SERVER  ·  Python</text>
+  <text x="1000" y="108" text-anchor="middle" font-size="15" font-weight="700" fill="#9A6A04">NATIVE C + OS  ·  Linux</text>
+  <line x1="46"  y1="118" x2="314"  y2="118" stroke="#9DBEF0" stroke-width="1"/>
+  <line x1="446" y1="118" x2="744"  y2="118" stroke="#9AD3B4" stroke-width="1"/>
+  <line x1="866" y1="118" x2="1134" y2="118" stroke="#F0C887" stroke-width="1"/>
+
+  <!-- ===== BROWSER CARDS ===== -->
+  <g filter="url(#sh)">
+    <rect x="46" y="150" width="268" height="66" rx="10" fill="#fff" stroke="#D9E2EC"/>
+    <rect x="46" y="322" width="268" height="60" rx="10" fill="#fff" stroke="#D9E2EC"/>
+    <rect x="46" y="476" width="268" height="66" rx="10" fill="#fff" stroke="#D9E2EC"/>
+  </g>
+  <circle cx="64" cy="166" r="11" fill="#2D7FF9"/><text x="64" y="170" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">1</text>
+  <text x="86" y="178" font-size="14" font-weight="600" fill="#16324F">Action buttons</text>
+  <text x="86" y="198" font-size="12" fill="#5B6B7B">attack (red) · defence (green)</text>
+
+  <circle cx="64" cy="338" r="11" fill="#E3A008"/><text x="64" y="342" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">2</text>
+  <text x="86" y="348" font-size="14" font-weight="600" fill="#16324F">Live log panel</text>
+  <text x="86" y="368" font-size="12" fill="#5B6B7B">auto-refreshes every 1.5 s</text>
+
+  <circle cx="64" cy="492" r="11" fill="#7C3AED"/><text x="64" y="496" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">3</text>
+  <text x="86" y="504" font-size="14" font-weight="600" fill="#16324F">Verify panel</text>
+  <text x="86" y="524" font-size="12" fill="#5B6B7B">protection evidence</text>
+
+  <!-- ===== FLASK CARDS ===== -->
+  <g filter="url(#sh)">
+    <rect x="446" y="146" width="298" height="46" rx="10" fill="#fff" stroke="#D9E2EC"/>
+    <rect x="446" y="208" width="298" height="96" rx="10" fill="#fff" stroke="#D9E2EC"/>
+    <rect x="446" y="322" width="298" height="60" rx="10" fill="#fff" stroke="#D9E2EC"/>
+    <rect x="446" y="476" width="298" height="66" rx="10" fill="#fff" stroke="#D9E2EC"/>
+  </g>
+  <text x="595" y="175" text-anchor="middle" font-size="14" font-weight="600" fill="#16324F">Routes  /api/vuln · /api/secure · …</text>
+
+  <text x="595" y="234" text-anchor="middle" font-size="14" font-weight="700" fill="#16324F">run_native()</text>
+  <text x="595" y="256" text-anchor="middle" font-size="13" fill="#33475B">_classify()  → outcome</text>
+  <text x="595" y="276" text-anchor="middle" font-size="13" fill="#33475B">_parse_memory()  → before/after</text>
+  <text x="595" y="294" text-anchor="middle" font-size="12" fill="#5B6B7B">runs the C program as a subprocess</text>
+
+  <text x="595" y="346" text-anchor="middle" font-size="14" font-weight="600" fill="#16324F">LogBuffer (deque)</text>
+  <text x="595" y="366" text-anchor="middle" font-size="12" fill="#5B6B7B">+ demo.log file</text>
+
+  <text x="595" y="502" text-anchor="middle" font-size="14" font-weight="700" fill="#16324F">verify()</text>
+  <text x="595" y="522" text-anchor="middle" font-size="12" fill="#5B6B7B">calls objdump / readelf</text>
+
+  <!-- ===== NATIVE CARDS ===== -->
+  <g filter="url(#sh)">
+    <rect x="866" y="146" width="268" height="56" rx="10" fill="#fff" stroke="#D9E2EC"/>
+    <rect x="866" y="214" width="268" height="44" rx="10" fill="#FFE3E3" stroke="#E78F8F"/>
+    <rect x="866" y="268" width="268" height="44" rx="10" fill="#DCF3E4" stroke="#86CFA3"/>
+    <rect x="866" y="322" width="268" height="44" rx="10" fill="#EEF1F4" stroke="#C3CCD6"/>
+    <rect x="866" y="476" width="268" height="66" rx="10" fill="#F1EAFE" stroke="#C9B6F5"/>
+  </g>
+  <text x="1000" y="170" text-anchor="middle" font-size="14" font-weight="600" fill="#16324F">subprocess</text>
+  <text x="1000" y="190" text-anchor="middle" font-size="12" fill="#5B6B7B">isolated, 5 s timeout</text>
+  <text x="1000" y="241" text-anchor="middle" font-size="13" font-weight="600" fill="#8A2B2B">bufferdemo_vuln</text>
+  <text x="1000" y="295" text-anchor="middle" font-size="13" font-weight="600" fill="#1E6B3D">bufferdemo_hardened</text>
+  <text x="1000" y="349" text-anchor="middle" font-size="12.5" font-weight="600" fill="#475569">OS signals: SIGSEGV · SIGABRT</text>
+  <text x="1000" y="503" text-anchor="middle" font-size="14" font-weight="700" fill="#5B3AA6">objdump / readelf</text>
+  <text x="1000" y="523" text-anchor="middle" font-size="12" fill="#6B5A8E">reads ELF: canary · NX · PIE</text>
+
+  <!-- ===== FLOW 1 (blue) ===== -->
+  <path d="M314,172 C 380,172 392,168 446,168" fill="none" stroke="#2D7FF9" stroke-width="2" marker-end="url(#aB)"/>
+  <text x="380" y="150" text-anchor="middle" font-size="12" font-weight="600" fill="#2D7FF9">POST /api/…  { input }</text>
+
+  <path d="M595,192 L595,208" fill="none" stroke="#2D7FF9" stroke-width="2" marker-end="url(#aB)"/>
+
+  <path d="M744,232 C 800,232 812,172 866,172" fill="none" stroke="#2D7FF9" stroke-width="2" marker-end="url(#aB)"/>
+  <text x="806" y="210" text-anchor="middle" font-size="12" font-weight="600" fill="#2D7FF9">spawn [bin, mode, input]</text>
+
+  <path d="M955,202 L940,214" fill="none" stroke="#2D7FF9" stroke-width="1.6" marker-end="url(#aB)"/>
+  <path d="M1000,202 C 1010,232 1010,250 1004,268" fill="none" stroke="#2D7FF9" stroke-width="1.6" marker-end="url(#aB)"/>
+
+  <path d="M866,192 C 806,192 800,262 744,266" fill="none" stroke="#2D7FF9" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#aB)"/>
+  <text x="806" y="250" text-anchor="middle" font-size="12" fill="#2D7FF9">exit / signal / stdout</text>
+
+  <path d="M446,276 C 384,276 384,196 314,192" fill="none" stroke="#2D7FF9" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#aB)"/>
+  <text x="372" y="300" text-anchor="middle" font-size="12" fill="#2D7FF9">JSON { outcome, memory, access }</text>
+
+  <path d="M650,304 C 650,314 650,314 650,322" fill="none" stroke="#2D7FF9" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#aB)"/>
+  <text x="662" y="316" font-size="11.5" fill="#2D7FF9">write INVOKE / RESULT</text>
+
+  <!-- ===== FLOW 2 (amber) ===== -->
+  <path d="M314,340 L446,344" fill="none" stroke="#E3A008" stroke-width="2" marker-end="url(#aA)"/>
+  <text x="380" y="330" text-anchor="middle" font-size="12" font-weight="600" fill="#B97D06">GET /api/backend-logs</text>
+
+  <path d="M446,366 L314,366" fill="none" stroke="#E3A008" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#aA)"/>
+  <text x="380" y="381" text-anchor="middle" font-size="11.5" fill="#B97D06">{ lines[ ] }   (poll 1.5 s)</text>
+
+  <!-- ===== FLOW 3 (purple) ===== -->
+  <path d="M314,498 L446,500" fill="none" stroke="#7C3AED" stroke-width="2" marker-end="url(#aP)"/>
+  <text x="380" y="486" text-anchor="middle" font-size="12" font-weight="600" fill="#7C3AED">GET /api/verify</text>
+
+  <path d="M744,502 L866,504" fill="none" stroke="#7C3AED" stroke-width="2" marker-end="url(#aP)"/>
+  <text x="805" y="490" text-anchor="middle" font-size="12" font-weight="600" fill="#7C3AED">inspect binaries</text>
+
+  <path d="M1004,476 C 1004,420 1004,330 1004,312" fill="none" stroke="#7C3AED" stroke-width="1.6" marker-end="url(#aP)"/>
+  <path d="M940,476 C 940,400 940,300 940,258" fill="none" stroke="#7C3AED" stroke-width="1.6" marker-end="url(#aP)"/>
+  <text x="1086" y="430" text-anchor="middle" font-size="11.5" fill="#7C3AED">read ELF</text>
+
+  <path d="M446,518 L314,518" fill="none" stroke="#7C3AED" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#aP)"/>
+  <text x="380" y="533" text-anchor="middle" font-size="11" fill="#7C3AED">{ canary, NX, PIE, sha256 }</text>
+
+  <!-- ===== LEGEND ===== -->
+  <rect x="30" y="666" width="1120" height="104" rx="14" fill="#FFFFFF" stroke="#E2E8F0"/>
+  <text x="48" y="690" font-size="13" font-weight="700" fill="#0F172A">How to read it</text>
+
+  <line x1="48" y1="712" x2="92" y2="712" stroke="#2D7FF9" stroke-width="3"/>
+  <circle cx="70" cy="712" r="9" fill="#2D7FF9"/><text x="70" y="716" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">1</text>
+  <text x="104" y="709" font-size="12.5" font-weight="600" fill="#16324F">Main request / response</text>
+  <text x="104" y="727" font-size="11.5" fill="#5B6B7B">Runs the C program (vulnerable or hardened),</text>
+  <text x="104" y="743" font-size="11.5" fill="#5B6B7B">returns the result + memory evidence, and writes a log line.</text>
+
+  <line x1="430" y1="712" x2="474" y2="712" stroke="#E3A008" stroke-width="3"/>
+  <circle cx="452" cy="712" r="9" fill="#E3A008"/><text x="452" y="716" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">2</text>
+  <text x="486" y="709" font-size="12.5" font-weight="600" fill="#16324F">Live log polling</text>
+  <text x="486" y="727" font-size="11.5" fill="#5B6B7B">The page pulls the server log every 1.5 s and shows</text>
+  <text x="486" y="743" font-size="11.5" fill="#5B6B7B">the real exit codes and signals from the OS.</text>
+
+  <line x1="800" y1="712" x2="844" y2="712" stroke="#7C3AED" stroke-width="3"/>
+  <circle cx="822" cy="712" r="9" fill="#7C3AED"/><text x="822" y="716" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">3</text>
+  <text x="856" y="709" font-size="12.5" font-weight="600" fill="#16324F">Verify protections</text>
+  <text x="856" y="727" font-size="11.5" fill="#5B6B7B">Inspects both compiled binaries (canary, NX, PIE, hash)</text>
+  <text x="856" y="743" font-size="11.5" fill="#5B6B7B">to prove they are genuinely different programs.</text>
+</svg>
